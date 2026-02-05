@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Viewer</title>
+  <link rel="stylesheet" href="styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.157.0/examples/jsm/",
+      "@lumaai/luma-web": "https://unpkg.com/@lumaai/luma-web@0.2.0/dist/library/luma-web.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <button id="bg-toggle">Black Background</button>
+  <button id="fullscreen-btn">Fullscreen</button>
+
+  <div class="link-container">
+
+    <a href="#" data-src="https://lumalabs.ai/capture/afeec738-2a49-42bd-bd0b-fde2fd215d20">Dino head (GS)</a> |
+    <a href="#" data-src="https://lumalabs.ai/capture/8bb65c41-db69-4096-ad66-413283039e3b">Tree trunk (GS)</a> |
+    <a href="#" data-src="https://lumalabs.ai/capture/bbd433e8-9cad-4546-8be1-3f13d99f9584">Raised stand (GS)</a> |
+    <a href="#" data-src="models/Affe_lowpoly_tris.obj">Lowpoly monkey (OBJ)</a> |
+    <!-- <a href="#" data-src="models/Schildkroete.fbx">Turtle sculpture (FBX)</a> | -->
+    <a href="#" data-src="models/Bienenkasten.glb">Beehive (GLTF)</a>
+  </div>
+
+  <!-- Overlay als separate Datei (kein inhaltlicher Change, nur ausgelagert) -->
+  <iframe id="overlay-frame" src="overlay.html" title="Overlay" loading="eager"></iframe>
+
+  <div id="loading">Loading...</div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
