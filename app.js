@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Christoph Medicus
+// Licensed under the MIT License
+
 import {
   WebGLRenderer, PerspectiveCamera, Scene, Color, Vector3, Quaternion, Euler,
   Box3, MeshStandardMaterial, Mesh, AmbientLight, HemisphereLight, DirectionalLight,
