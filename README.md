@@ -1,4 +1,4 @@
-# MODEL-VIEWER
+# Gaussian Splatting + VR model-viewer 
 
 A browser based viewer app to explore Gaussian Splattings and other 3D models online including WebXR / VR options, atm tested with and optimised for Meta Quest 3. Build with Java Script using Three.js and the luma-webGL-library and based the luma-webGL-library framework. -> https://github.com/lumalabs/luma-web-examples
 ________________
