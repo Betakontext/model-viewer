@@ -1,4 +1,6 @@
-This is a browser based model-viewer to explore Gaussian Splattings and other 3D models online, build with Java Script using the luma-webGL-library and based on Three.js frameworks. -> https://github.com/lumalabs/luma-web-examples
+# MODEL-VIEWER
+
+A browser based viewer app to explore Gaussian Splattings and other 3D models online including WebXR / VR options, atm tested with and optimised for Meta Quest 3. Build with Java Script using Three.js and the luma-webGL-library and based the luma-webGL-library framework. -> https://github.com/lumalabs/luma-web-examples
 
 It includes WebXR / VR options, at the moment only tested with and optimised for Meta Quest 3.
 ---------------
@@ -13,7 +15,9 @@ overlay.html adds another layer, atm only containing some title/reference text.
 Online version: https://dev.betakontext.de/model-viewer
 ---------------
 To explore models locally download the whole repository and start a local http-server inside the root directory of the project, f.e. on Linux:
-bash: python3 -m http.server 8000
+
+	python3 -m http.server 8000
+
 Then open http://localhost:8000/ in your browser.
 ctrl+c in the terminal closes the server.
 ---------------
@@ -21,5 +25,5 @@ ctrl+c in the terminal closes the server.
 If you want to develop it further feel free to fork, explore and have fun.
 ---------------
 ---------------
-The project got realized with GPT 5 coding assistance and published here under MIT licence.
+The project got realized with AI assistance and published under MIT licence.
 CONTACT: Christoph Medicus | dev@betakontext.de
