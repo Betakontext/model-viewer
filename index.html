@@ -1,15 +1,16 @@
 <!--
-// Copyright (c) 2026 Christoph Medicus
-// Fork and explore: https://github.com/betakontext/model-viewer
-// Licensed under the MIT License -->
+Copyright (c) 2026 Christoph Medicus
+Fork and explore: https://github.com/betakontext/model-viewer
+Licensed under the MIT License
+-->
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>3D Viewer</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css" />
   <script type="importmap">
   {
     "imports": {
@@ -24,17 +25,32 @@
   <button id="bg-toggle">Black Background</button>
   <button id="fullscreen-btn">Fullscreen</button>
 
-  <div class="link-container">
-
+  <!-- Linkleiste mit Overlay-Typografie (weiß + Textschatten) -->
+  <div class="link-container overlay-typography">
     <a href="#" data-src="https://lumalabs.ai/capture/afeec738-2a49-42bd-bd0b-fde2fd215d20">Dino head (GS)</a> |
     <a href="#" data-src="https://lumalabs.ai/capture/8bb65c41-db69-4096-ad66-413283039e3b">Tree trunk (GS)</a> |
     <a href="#" data-src="https://lumalabs.ai/capture/bbd433e8-9cad-4546-8be1-3f13d99f9584">Raised stand (GS)</a> |
+    <a href="#" data-src="https://superspl.at/s?id=72100825">Euro coin (GS)</a> |
     <a href="#" data-src="models/Affe_lowpoly_tris.obj">Lowpoly monkey (OBJ)</a> |
     <!-- <a href="#" data-src="models/Schildkroete.fbx">Turtle sculpture (FBX)</a> | -->
     <a href="#" data-src="models/Bienenkasten.glb">Beehive (GLTF)</a>
   </div>
 
-  <!-- Overlay als separate Datei (kein inhaltlicher Change, nur ausgelagert) -->
+  <!-- Viewer slot: hält entweder Three-Canvas oder den SuperSplat-iframe -->
+  <div id="viewer-slot" class="viewer-slot">
+    <!-- app.js verschiebt renderer.domElement hier hinein -->
+    <iframe
+      id="supersplat-inline"
+      class="supersplat-inline hidden"
+      title="SuperSplat Viewer"
+      src=""
+      allow="xr; vr; xr-spatial-tracking; fullscreen; autoplay"
+      loading="eager"
+      referrerpolicy="no-referrer-when-downgrade">
+    </iframe>
+  </div>
+
+  <!-- Overlay als separate Datei (unchanged) -->
   <iframe id="overlay-frame" src="overlay.html" title="Overlay" loading="eager"></iframe>
 
   <div id="loading">Loading...</div>

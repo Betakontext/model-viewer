@@ -1,31 +1,47 @@
 html, body {
-  margin: 0; padding: 0; width: 100%; height: 100%;
-  overflow: hidden; position: relative; background: transparent;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  background: transparent;
 }
 
+/* Buttons */
 button {
-  position: absolute; top: 10px; padding: 8px 12px;
-  font-size: 14px; cursor: pointer; z-index: 100;
+  position: absolute;
+  top: 10px;
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  z-index: 100;
 }
 #bg-toggle { left: 10px; }
 #fullscreen-btn { right: 10px; }
 
+/* Linkleiste — typografisch wie overlay.html: weiß + Textschatten */
 .link-container {
-  position: absolute; bottom: 10px; left: 20px; z-index: 100;
-  color: white; font-family: sans-serif; pointer-events: auto;}
-/* Standard: Links weiß */
-.link-container a {
-  color: white; text-decoration: none; }
-
-.link-container.bg-on a {
-  color: black;
+  position: absolute;
+  bottom: 10px;
+  left: 20px;
+  z-index: 100;
+  pointer-events: auto;
 }
-
-.link-container.fullscreen-bg-on a {
+.link-container.overlay-typography {
+  font-family: sans-serif;
   color: white;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+}
+.link-container.overlay-typography a {
+  color: white;
+  text-decoration: none;
+}
+.link-container.overlay-typography a:hover {
+  text-decoration: underline;
 }
 
-/* VRButton-Layout (Farbe bleibt wie im Original: schwarz) */
+/* VRButton-Layout */
 #VRButton {
   position: absolute !important;
   bottom: 70px !important;
@@ -41,23 +57,47 @@ button {
   color: white !important;
 }
 
-/* Loading-Overlay – exakt wie in deinem Stand */
+/* Loading-Overlay */
 #loading {
-  position: absolute; top: 50%; left: 50%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
   transform: translate(-50%, -50%);
-  color: white; font-size: 24px; display: none;
+  color: white;
+  font-size: 24px;
+  display: none;
   z-index: 1000;
 }
 
-/* Overlay-Frame: nimmt keinen zusätzlichen Platz weg, liegt oben */
+/* Overlay-Frame (Titel) */
 #overlay-frame {
   position: absolute !important;
   left: 10px !important;
-  bottom: 60px !important; /* kleinerer Abstand zur Unterkante = tiefer nach unten */
-  height: 65px; /* Einheit px ergänzt */
+  bottom: 60px !important;
+  height: 65px;
   border: 0;
   z-index: 70;
 }
 
-.hidden { display: none; }
+/* Viewer slot, der Canvas und Supersplat-iframe fasst */
+.viewer-slot {
+  position: absolute;
+  inset: 0;
+  z-index: 0; /* unter der UI */
+  overflow: hidden;
+}
 
+/* Canvas und iframe füllen den Slot */
+.viewer-slot > canvas,
+#supersplat-inline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  border: 0;
+  background: #000; /* Basis: neutral — tatsächlicher BG wird von app.js gesteuert */
+}
+
+/* Utilities */
+.hidden { display: none !important; }
