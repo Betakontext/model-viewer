@@ -24,7 +24,7 @@ const renderer = new WebGLRenderer({ antialias: true, alpha: true, powerPreferen
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-// Default: immer Weiß beim (Neu-)Laden eines Modells
+// Default: always white when (re)loading a model
 renderer.setClearColor(0xffffff, 1);
 renderer.outputColorSpace = SRGBColorSpace;
 
@@ -41,7 +41,7 @@ if ('xr' in navigator) {
       const vrButton = VRButton.createButton(renderer);
       vrButton.id = 'VRButton';
       document.body.appendChild(vrButton);
-      // Initiales Label setzen
+      // Initialize label once
       updateVRButtonLabel();
     }
   }).catch(err => console.error("XR support check failed:", err));
@@ -50,7 +50,7 @@ if ('xr' in navigator) {
 window.appRenderer = renderer;
 
 const scene = new Scene();
-scene.background = new Color(0xffffff); // Start immer weiß
+scene.background = new Color(0xffffff); // start white
 
 const camera = new PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.z = 2;
@@ -105,41 +105,66 @@ let entryYaw = 0;
 
 // ---------- UI / current model state ----------
 let currentObject = null;
-let currentIsSplat = false; // true nur für Luma-Splat-Objekte in Three
+let currentIsSplat = false; // true only for Luma splats loaded in Three
 let isCurrentSplatType = 'mesh'; // 'mesh' | 'luma' | 'super'
-let currentBgMode = 'white';     // 'white' | 'black' | 'original' (bei Luma/Super)
+let currentBgMode = 'white';     // 'white' | 'black' | 'original' (for Luma/Super)
 const bgBtn = document.getElementById('bg-toggle');
 
 // Supersplat inline iframe
 const supersplatFrame = document.getElementById('supersplat-inline');
 const SUPER_SPLAT_RX = /superspl\.at\/s\?id=\w+/i;
 
+// ---------- Background label updater (centralized) ----------
+function updateBgButtonLabel() {
+  const el = document.getElementById('bg-toggle');
+  if (!el) return;
+
+  if (isCurrentSplatType === 'luma') {
+    // Luma: toggle between foreground-only (white canvas) and original background
+    // Button text should reflect the action it will perform next
+    // white => will show background; original => will remove background
+    el.textContent = (currentBgMode === 'white') ? 'Background' : 'Remove background';
+  } else if (isCurrentSplatType === 'super') {
+    // SuperSplat: emulate same wording as Luma (no semantics control from here)
+    el.textContent = (currentBgMode === 'white') ? 'Background' : 'Remove background';
+  } else {
+    // Mesh: toggle black/white background
+    el.textContent = (currentBgMode === 'white') ? 'Black Background' : 'White Background';
+  }
+}
+
 // ---------- Utilities ----------
 function setBackgroundWhite() {
   renderer.setClearColor(0xffffff, 1);
   scene.background = new Color(0xffffff);
   currentBgMode = 'white';
+  updateBgButtonLabel();
 }
 
 function setBackgroundBlack() {
   renderer.setClearColor(0x000000, 1);
-  scene.background = null; // Schwarz ohne HDR-Hintergrund
+  scene.background = null; // plain black without HDR background
   currentBgMode = 'black';
+  updateBgButtonLabel();
 }
 
 function setBackgroundOriginalForLuma() {
+  // For Luma, "original" ≈ enable both foreground and background layers
   if (currentObject instanceof LumaSplatsThree) {
     currentObject.semanticsMask = LumaSplatsSemantics.FOREGROUND | LumaSplatsSemantics.BACKGROUND;
   }
-  setBackgroundBlack();
-  currentBgMode = 'original';
+  // Keep canvas neutral for splats' own background; black works best
+  setBackgroundBlack();      // sets currentBgMode='black' and updates label
+  currentBgMode = 'original';// correct to 'original' to reflect semantics state
+  updateBgButtonLabel();     // ensure label matches 'original'
 }
 
 function setForegroundOnlyForLuma() {
   if (currentObject instanceof LumaSplatsThree) {
     currentObject.semanticsMask = LumaSplatsSemantics.FOREGROUND;
   }
-  setBackgroundWhite();
+  setBackgroundWhite();      // sets currentBgMode='white' and updates label
+  updateBgButtonLabel();     // redundant but safe
 }
 
 function isLumaCapture(url) {
@@ -305,21 +330,23 @@ function hideThreeVRButton() {
 function showSupersplatInline(url) {
   renderer.domElement.classList.add('hidden');
   if (supersplatFrame) {
-    // index.html: <iframe allow="xr; vr; xr-spatial-tracking; fullscreen; autoplay" allowfullscreen>
     supersplatFrame.src = url;
     supersplatFrame.classList.remove('hidden');
   }
   try { if (!inXR) renderer.setAnimationLoop(null); } catch (e) {}
-  // Typ/State setzen
+  // Type / state
   isCurrentSplatType = 'super';
-  currentIsSplat = false; // kein Three-Objekt
-  // Start immer in Weiß
+  currentIsSplat = false; // not a Three object
+  // Always start white
   setBackgroundWhite();
-  // Button-Text für Splats
+  // Initial label for splats
   setBgButtonLabelForSplat();
 
-  // Three-VRButton ausblenden — Supersplat bringt eigenen VR-Button mit
+  // Hide Three VR button (SuperSplat has its own)
   hideThreeVRButton();
+
+  // Ensure label reflects current mode/type
+  updateBgButtonLabel();
 }
 
 function hideSupersplatInline() {
@@ -329,17 +356,20 @@ function hideSupersplatInline() {
   }
   renderer.domElement.classList.remove('hidden');
   try { if (!inXR && window.appMainLoop) renderer.setAnimationLoop(window.appMainLoop); } catch (e) {}
-  // Wieder einblenden für Luma/Mesh
+  // Show again for Luma/Mesh
   showThreeVRButton();
+
+  // Ensure label reflects current type
+  updateBgButtonLabel();
 }
 
-// ---------- Laden ----------
+// ---------- Loading ----------
 async function loadAny(url) {
   const loadingEl = document.getElementById('loading');
   if (loadingEl) loadingEl.style.display = 'block';
 
   try {
-    // Supersplat: inline anzeigen
+    // SuperSplat: show inline
     if (SUPER_SPLAT_RX.test(url)) {
       if (loadingEl) loadingEl.style.display = 'none';
       removeCurrent();
@@ -347,10 +377,10 @@ async function loadAny(url) {
       return;
     }
 
-    // Für alle anderen: iframe sicher verstecken
+    // For all others: hide iframe
     hideSupersplatInline();
 
-    // Immer zunächst Weiß für neues Modell
+    // Always start white for a new model
     setBackgroundWhite();
 
     // Luma
@@ -363,10 +393,10 @@ async function loadAny(url) {
       currentIsSplat = true;
       isCurrentSplatType = 'luma';
 
-      // Luma initial freigestellt
+      // Luma starts as foreground-only (white background)
       setForegroundOnlyForLuma();
 
-      // Button-Text für Splats
+      // Initial label for splats
       setBgButtonLabelForSplat();
 
       if (inXR && currentObject) {
@@ -380,15 +410,18 @@ async function loadAny(url) {
 
       if (loadingEl) loadingEl.style.display = 'none';
       setTimeout(() => {
-        applyStateForCurrent(url); // behält Semantics-Logik (Höhenmasken) bei
+        applyStateForCurrent(url); // keep semantics (height masks) behavior
       }, 0);
 
-      // Three-VRButton für Luma sicher anzeigen
+      // Ensure Three VR button is visible for Luma
       showThreeVRButton();
+
+      // Ensure label is correct after load
+      updateBgButtonLabel();
       return;
     }
 
-    // Mesh-basierte Formate
+    // Mesh-based formats
     removeCurrent();
 
     const lower = url.toLowerCase();
@@ -442,7 +475,7 @@ async function loadAny(url) {
 
     if (!loaded) throw new Error('Model loaded but no scene/object found');
 
-    // Mesh: als “nicht-Splat” markieren
+    // Mesh: mark as non-splat
     currentIsSplat = false;
     isCurrentSplatType = 'mesh';
 
@@ -458,13 +491,16 @@ async function loadAny(url) {
     if (inXR && currentObject) placeObjectInFrontOfCamera(currentObject, 1.0);
     frameByBox(wrapper, 1.25);
 
-    // Button-Text für Nicht-Splat
+    // Initial label for non-splat
     setBgButtonLabelForMesh();
 
     if (loadingEl) loadingEl.style.display = 'none';
 
-    // Three-VRButton für Mesh sicher anzeigen
+    // Ensure Three VR button visible for Mesh
     showThreeVRButton();
+
+    // Ensure label is correct after load
+    updateBgButtonLabel();
 
   } catch (e) {
     console.error('Loading failed:', e);
@@ -473,7 +509,7 @@ async function loadAny(url) {
   }
 }
 
-// ---------- BG Toggle Logik ----------
+// ---------- BG toggle label helpers (kept for compatibility, but central updater is authoritative) ----------
 function setBgButtonLabelForSplat() {
   const bgBtnEl = document.getElementById('bg-toggle');
   if (bgBtnEl) bgBtnEl.textContent = 'Background';
@@ -483,30 +519,34 @@ function setBgButtonLabelForMesh() {
   if (bgBtnEl) bgBtnEl.textContent = 'Black Background';
 }
 
+// ---------- BG toggle click ----------
 document.getElementById('bg-toggle')?.addEventListener('click', () => {
-  // Splats: “Background” → zwischen freigestellt (weiß) und “Original” (voll) wechseln
+  // Luma: toggle between foreground-only (white) and "original" (full) background
   if (isCurrentSplatType === 'luma') {
     if (currentBgMode === 'white') {
-      setBackgroundOriginalForLuma(); // zeigt auch BACKGROUND an (semantics)
+      setBackgroundOriginalForLuma();
     } else {
-      setForegroundOnlyForLuma(); // wieder freigestellt und weiß
+      setForegroundOnlyForLuma();
     }
   } else if (isCurrentSplatType === 'super') {
-    // Beim Supersplat-iframe kein Semantikzugriff → “Original” via Schwarz emulieren
+    // SuperSplat iframe: emulate "original" by switching canvas to black; no direct semantics control
     if (currentBgMode === 'white') {
-      setBackgroundBlack();  // “Original”-Look
+      setBackgroundBlack();
       currentBgMode = 'original';
     } else {
-      setBackgroundWhite();  // freigestellt
+      setBackgroundWhite();
     }
   } else {
-    // Nicht-Splat: “Black Background” → weiß/schwarz toggeln
+    // Non-splat: toggle plain white/black
     if (currentBgMode === 'white') setBackgroundBlack();
     else setBackgroundWhite();
   }
+
+  // Always refresh label after switching background
+  updateBgButtonLabel();
 });
 
-// ---------- Luma Semantics (Höhenmasken) wie gehabt ----------
+// ---------- Luma semantics (height masks), unchanged ----------
 const states = [
   { mask: LumaSplatsSemantics.FOREGROUND | LumaSplatsSemantics.BACKGROUND, bg: new Color(0x000000), text: 'Remove background' },
   { mask: LumaSplatsSemantics.FOREGROUND, bg: null, text: 'Background' }
@@ -514,7 +554,6 @@ const states = [
 let stateIndex = 1;
 
 function applyStateForCurrent(sourceUrl) {
-  // Wir überschreiben die alte Button-Text-Logik mit unseren Labels, nutzen hier nur die Shader-Hooks.
   if (!(currentObject instanceof LumaSplatsThree)) return;
 
   const MODEL_1 = 'https://lumalabs.ai/capture/afeec738-2a49-42bd-bd0b-fde2fd215d20';
@@ -573,7 +612,7 @@ document.addEventListener('fullscreenchange', () => {
   onResize();
 });
 
-// ---------- Link Klicks ----------
+// ---------- Link clicks ----------
 document.querySelectorAll('a[data-src]').forEach(link => {
   link.addEventListener('click', (e) => {
     e.preventDefault();
@@ -600,7 +639,7 @@ renderer.xr.addEventListener('sessionstart', () => {
   inXR = true;
   controls.enabled = false;
 
-  // VR-Button-Label umschalten
+  // Update VR button label when session starts
   updateVRButtonLabel();
 
   yawTarget = 0; pitchTarget = 0;
@@ -609,7 +648,7 @@ renderer.xr.addEventListener('sessionstart', () => {
   if (currentObject) placeObjectInFrontOfCamera(currentObject, 1.0);
 
   const session = renderer.xr.getSession();
-  session.requestReferenceSpace('local').then((refSpace) => {
+  session?.requestReferenceSpace('local').then((refSpace) => {
     controls.update();
     const camPos = camera.getWorldPosition(new Vector3());
     const camQuat = camera.getWorldQuaternion(new Quaternion());
@@ -621,7 +660,7 @@ renderer.xr.addEventListener('sessionstart', () => {
     );
     const offsetSpace = refSpace.getOffsetReferenceSpace(transform);
     renderer.xr.setReferenceSpace(offsetSpace);
-  });
+  }).catch(() => {});
 });
 
 renderer.xr.addEventListener('sessionend', () => {
@@ -629,14 +668,15 @@ renderer.xr.addEventListener('sessionend', () => {
   endRotateWithController();
   controls.enabled = true;
 
-  // VR-Button-Label zurücksetzen
+  // Reset VR button label when session ends
   updateVRButtonLabel();
 });
 
-// ESC-Taste beendet VR
+// ESC ends VR
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && renderer.xr.isPresenting) {
-    renderer.xr.end().catch(() => {});
+    const session = renderer.xr.getSession && renderer.xr.getSession();
+    if (session) session.end().catch(() => {});
   }
 });
 
@@ -671,12 +711,15 @@ function mainLoop(time, frame) {
 renderer.setAnimationLoop(mainLoop);
 window.appMainLoop = mainLoop;
 
-// ---------- VR-Button-Label Helfer ----------
+// ---------- VR button label helper ----------
 function updateVRButtonLabel() {
   const el = document.getElementById('VRButton');
   if (!el) return;
   el.textContent = renderer.xr.isPresenting ? 'EXIT VR' : 'ENTER VR';
 }
 
-// ---------- Initiales Modell ----------
+// ---------- Initial model ----------
 loadAny('models/Affe_lowpoly_tris.obj');
+
+// Ensure initial background button label is consistent
+updateBgButtonLabel();

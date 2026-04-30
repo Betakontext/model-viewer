@@ -1,0 +1,26 @@
+# Enable CORS for static assets (JSON, images, etc.)
+<IfModule mod_headers.c>
+    # Allow all origins (safe if no credentials)
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, OPTIONS"
+    Header set Access-Control-Allow-Headers "Content-Type, Accept, Origin"
+    Header set Access-Control-Max-Age "86400"
+</IfModule>
+
+# Handle CORS preflight requests
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ $1 [R=200,L]
+</IfModule>
+
+# Set proper content type for JSON (adjust path if needed)
+<FilesMatch "\.(json)$">
+    ForceType application/json
+    <IfModule mod_headers.c>
+        Header set Access-Control-Allow-Origin "*"
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+    </IfModule>
+</FilesMatch>
