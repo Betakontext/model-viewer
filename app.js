@@ -41,9 +41,8 @@ if ('xr' in navigator) {
       const vrButton = VRButton.createButton(renderer);
       vrButton.id = 'VRButton';
       document.body.appendChild(vrButton);
-      vrButton.addEventListener('click', () => {
-        if (renderer.xr.isPresenting) renderer.xr.end();
-      });
+      // Initiales Label setzen
+      updateVRButtonLabel();
     }
   }).catch(err => console.error("XR support check failed:", err));
 }
@@ -129,11 +128,9 @@ function setBackgroundBlack() {
 }
 
 function setBackgroundOriginalForLuma() {
-  // “Original-Hintergrund” bei Luma ≈ beide Layer einblenden
   if (currentObject instanceof LumaSplatsThree) {
     currentObject.semanticsMask = LumaSplatsSemantics.FOREGROUND | LumaSplatsSemantics.BACKGROUND;
   }
-  // Renderer-Farbe egal, Splats blenden Hintergrund ein → neutrale schwarze Canvas passt am besten
   setBackgroundBlack();
   currentBgMode = 'original';
 }
@@ -294,10 +291,21 @@ function getThumbstickY() {
   return y;
 }
 
+// ---------- VR Button show/hide helpers ----------
+function showThreeVRButton() {
+  const el = document.getElementById('VRButton');
+  if (el) el.style.display = '';
+}
+function hideThreeVRButton() {
+  const el = document.getElementById('VRButton');
+  if (el) el.style.display = 'none';
+}
+
 // ---------- Supersplat inline ----------
 function showSupersplatInline(url) {
   renderer.domElement.classList.add('hidden');
   if (supersplatFrame) {
+    // index.html: <iframe allow="xr; vr; xr-spatial-tracking; fullscreen; autoplay" allowfullscreen>
     supersplatFrame.src = url;
     supersplatFrame.classList.remove('hidden');
   }
@@ -309,6 +317,9 @@ function showSupersplatInline(url) {
   setBackgroundWhite();
   // Button-Text für Splats
   setBgButtonLabelForSplat();
+
+  // Three-VRButton ausblenden — Supersplat bringt eigenen VR-Button mit
+  hideThreeVRButton();
 }
 
 function hideSupersplatInline() {
@@ -318,7 +329,8 @@ function hideSupersplatInline() {
   }
   renderer.domElement.classList.remove('hidden');
   try { if (!inXR && window.appMainLoop) renderer.setAnimationLoop(window.appMainLoop); } catch (e) {}
-  // Typ bleibt, bis ein anderes Modell geladen wird
+  // Wieder einblenden für Luma/Mesh
+  showThreeVRButton();
 }
 
 // ---------- Laden ----------
@@ -369,9 +381,10 @@ async function loadAny(url) {
       if (loadingEl) loadingEl.style.display = 'none';
       setTimeout(() => {
         applyStateForCurrent(url); // behält Semantics-Logik (Höhenmasken) bei
-        updateLinkColors();
       }, 0);
 
+      // Three-VRButton für Luma sicher anzeigen
+      showThreeVRButton();
       return;
     }
 
@@ -448,11 +461,10 @@ async function loadAny(url) {
     // Button-Text für Nicht-Splat
     setBgButtonLabelForMesh();
 
-    setTimeout(() => {
-      applyStateForCurrent(url);
-      updateLinkColors();
-      if (loadingEl) loadingEl.style.display = 'none';
-    }, 0);
+    if (loadingEl) loadingEl.style.display = 'none';
+
+    // Three-VRButton für Mesh sicher anzeigen
+    showThreeVRButton();
 
   } catch (e) {
     console.error('Loading failed:', e);
@@ -480,8 +492,7 @@ document.getElementById('bg-toggle')?.addEventListener('click', () => {
       setForegroundOnlyForLuma(); // wieder freigestellt und weiß
     }
   } else if (isCurrentSplatType === 'super') {
-    // Beim Supersplat-iframe haben wir keinen direkten Semantikzugriff.
-    // Emuliere “Original-Hintergrund” durch schwarzen Canvas-Hintergrund (wirkt natürlicher)
+    // Beim Supersplat-iframe kein Semantikzugriff → “Original” via Schwarz emulieren
     if (currentBgMode === 'white') {
       setBackgroundBlack();  // “Original”-Look
       currentBgMode = 'original';
@@ -493,8 +504,6 @@ document.getElementById('bg-toggle')?.addEventListener('click', () => {
     if (currentBgMode === 'white') setBackgroundBlack();
     else setBackgroundWhite();
   }
-
-  updateLinkColors();
 });
 
 // ---------- Luma Semantics (Höhenmasken) wie gehabt ----------
@@ -562,7 +571,6 @@ fsBtn?.addEventListener('click', () => {
 document.addEventListener('fullscreenchange', () => {
   if (fsBtn) fsBtn.textContent = document.fullscreenElement ? 'Exit Fullscreen' : 'Fullscreen';
   onResize();
-  updateLinkColors();
 });
 
 // ---------- Link Klicks ----------
@@ -592,6 +600,9 @@ renderer.xr.addEventListener('sessionstart', () => {
   inXR = true;
   controls.enabled = false;
 
+  // VR-Button-Label umschalten
+  updateVRButtonLabel();
+
   yawTarget = 0; pitchTarget = 0;
   vrYaw = 0; vrPitch = 0;
 
@@ -612,10 +623,21 @@ renderer.xr.addEventListener('sessionstart', () => {
     renderer.xr.setReferenceSpace(offsetSpace);
   });
 });
+
 renderer.xr.addEventListener('sessionend', () => {
   inXR = false;
   endRotateWithController();
   controls.enabled = true;
+
+  // VR-Button-Label zurücksetzen
+  updateVRButtonLabel();
+});
+
+// ESC-Taste beendet VR
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && renderer.xr.isPresenting) {
+    renderer.xr.end().catch(() => {});
+  }
 });
 
 // ---------- Main loop ----------
@@ -649,26 +671,11 @@ function mainLoop(time, frame) {
 renderer.setAnimationLoop(mainLoop);
 window.appMainLoop = mainLoop;
 
-// ---------- Link-Farblogik ----------
-function updateLinkColors() {
-  const linkContainer = document.querySelector('.link-container');
-  if (!linkContainer) return;
-
-  const isFullscreen = !!document.fullscreenElement;
-
-  // Für die aktuelle Anforderung belassen wir die Farblogik wie gehabt,
-  // der Button toggelt explizit den Hintergrund (weiß/schwarz/original)
-  if (isFullscreen && currentBgMode !== 'white') {
-    linkContainer.classList.add('fullscreen-bg-on');
-  } else {
-    linkContainer.classList.remove('fullscreen-bg-on');
-  }
-
-  if (currentBgMode !== 'white') {
-    linkContainer.classList.add('bg-on');
-  } else {
-    linkContainer.classList.remove('bg-on');
-  }
+// ---------- VR-Button-Label Helfer ----------
+function updateVRButtonLabel() {
+  const el = document.getElementById('VRButton');
+  if (!el) return;
+  el.textContent = renderer.xr.isPresenting ? 'EXIT VR' : 'ENTER VR';
 }
 
 // ---------- Initiales Modell ----------

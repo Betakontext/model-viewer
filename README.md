@@ -1,14 +1,17 @@
 # Gaussian Splatting + VR model-viewer 
 
-A browser based viewer app to explore Gaussian Splattings and other 3D models online including WebXR / VR options, atm tested with and optimised for Meta Quest 3. Build with Java Script using Three.js and the luma-webGL-library and based the luma-webGL-library framework. -> https://github.com/lumalabs/luma-web-examples
+A browser based viewer app to explore Gaussian Splattings from LumaLabs and Supersplat or *.ply, and other 3D models online including WebXR / VR options. I tested with and optimised for Meta Quest 3. Build with Java Script using Three.js and the luma-webGL-library and based the luma-webGL-library framework. -> https://github.com/lumalabs/luma-web-examples
 ________________
-app.js delivers options to showcase and explore Gaussian Splattings f.e. LumaSplats loaded from from local or external servers, besides to other 3D model types as *.obj, *.gltf and *.fbx. 3D files can be replaced inside the /models folder or put into any other folder, as long as you update the file paths inside of app.js.
+app.js delivers options to showcase and explore Gaussian Splattings f.e. LumaSplats loaded from from local or external servers, *.ply besides to other 3D model types as *.obj, *.gltf and *.fbx. 3D files can be replaced inside the /models folder or put into any other folder, as long as you update the file paths inside of app.js and ad another Button/link in index.html.
 
 index.hmtl delivers a little UI to switch between different models and is the base to showcase app.js in the browser.
+
+Models from https://superspl.at/ can be integrated as sublayer iframe. (In this example -> Euro coin example by ddthree: https://superspl.at/scene/72100825)
 
 overlay.html adds another layer, atm only containing some title/reference text.
 
 ________________
+
 Online version: https://dev.betakontext.de/model-viewer
 
 To explore models locally download the whole repository and start a local http-server inside the root directory of the project, f.e. on Linux:
