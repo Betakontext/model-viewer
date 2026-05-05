@@ -103,6 +103,12 @@ const DIST_SMOOTH = 0.18;
 const STICK_DIST_SENS = 0.025;
 let entryYaw = 0;
 
+// ---------- Right-stick step rotation state ----------
+let lastRightStep = 0;          // -1, 0, +1 depending on current tilt region
+const STEP_DEADZONE = 0.3;      // ignore small tilts
+const STEP_HYST = 0.2;          // hysteresis to prevent rapid flapping
+const STEP_ANGLE = Math.PI / 6; // 30 degrees per step
+
 // ---------- UI / current model state ----------
 let currentObject = null;
 let currentIsSplat = false; // true only for Luma splats loaded in Three
@@ -120,17 +126,79 @@ function updateBgButtonLabel() {
   if (!el) return;
 
   if (isCurrentSplatType === 'luma') {
-    // Luma: toggle between foreground-only (white canvas) and original background
-    // Button text should reflect the action it will perform next
-    // white => will show background; original => will remove background
     el.textContent = (currentBgMode === 'white') ? 'Background' : 'Remove background';
   } else if (isCurrentSplatType === 'super') {
-    // SuperSplat: emulate same wording as Luma (no semantics control from here)
     el.textContent = (currentBgMode === 'white') ? 'Background' : 'Remove background';
   } else {
-    // Mesh: toggle black/white background
     el.textContent = (currentBgMode === 'white') ? 'Black Background' : 'White Background';
   }
+}
+
+// ---------- XR gamepad helpers ----------
+function getControllerAxes(handedness) {
+  // Returns the most "active" stick pair for the given handedness.
+  const session = renderer.xr.getSession?.();
+  if (!session) return null;
+  for (const src of session.inputSources) {
+    if (!src) continue;
+    // Some runtimes may report 'none'; we skip those unless explicitly asked with 'any'
+    if (handedness !== 'any' && src.handedness !== handedness) continue;
+    const gp = src.gamepad;
+    if (!gp || !gp.axes || gp.axes.length < 2) continue;
+
+    const a0 = gp.axes[0] ?? 0, a1 = gp.axes[1] ?? 0;
+    const a2 = gp.axes[2] ?? 0, a3 = gp.axes[3] ?? 0;
+    const mag01 = Math.hypot(a0, a1);
+    const mag23 = Math.hypot(a2, a3);
+
+    if (mag23 > mag01 && gp.axes.length >= 4) {
+      return { x: a2, y: a3 };
+    } else {
+      return { x: a0, y: a1 };
+    }
+  }
+  return null;
+}
+
+function getControllerAxesByIndex(index) {
+  // Fallback when handedness is 'none' or unreliable: use first two gamepads discovered
+  const session = renderer.xr.getSession?.();
+  if (!session) return null;
+  let i = 0;
+  for (const src of session.inputSources) {
+    const gp = src.gamepad;
+    if (!gp || !gp.axes || gp.axes.length < 2) continue;
+    if (i === index) {
+      const a0 = gp.axes[0] ?? 0, a1 = gp.axes[1] ?? 0;
+      const a2 = gp.axes[2] ?? 0, a3 = gp.axes[3] ?? 0;
+      const mag01 = Math.hypot(a0, a1);
+      const mag23 = Math.hypot(a2, a3);
+      return (mag23 > mag01 && gp.axes.length >= 4) ? { x: a2, y: a3 } : { x: a0, y: a1 };
+    }
+    i++;
+  }
+  return null;
+}
+
+// Optional: runtime logger (enable temporarily for debugging)
+let _xrDebugTimer = 0;
+function debugXRGamepads(time) {
+  const session = renderer.xr.getSession?.();
+  if (!session) return;
+  if (time < _xrDebugTimer) return;
+  _xrDebugTimer = time + 1000; // log once per second
+
+  const summary = [];
+  for (const src of session.inputSources) {
+    const gp = src.gamepad;
+    if (!gp) continue;
+    summary.push({
+      hand: src.handedness,
+      axes: Array.from(gp.axes).map(v => +v.toFixed(2)),
+      buttons: gp.buttons?.map(b => (b?.pressed ? 1 : 0)) || []
+    });
+  }
+  if (summary.length) console.debug('[XR gp]', summary);
 }
 
 // ---------- Utilities ----------
@@ -149,22 +217,20 @@ function setBackgroundBlack() {
 }
 
 function setBackgroundOriginalForLuma() {
-  // For Luma, "original" ≈ enable both foreground and background layers
   if (currentObject instanceof LumaSplatsThree) {
     currentObject.semanticsMask = LumaSplatsSemantics.FOREGROUND | LumaSplatsSemantics.BACKGROUND;
   }
-  // Keep canvas neutral for splats' own background; black works best
-  setBackgroundBlack();      // sets currentBgMode='black' and updates label
-  currentBgMode = 'original';// correct to 'original' to reflect semantics state
-  updateBgButtonLabel();     // ensure label matches 'original'
+  setBackgroundBlack();
+  currentBgMode = 'original';
+  updateBgButtonLabel();
 }
 
 function setForegroundOnlyForLuma() {
   if (currentObject instanceof LumaSplatsThree) {
     currentObject.semanticsMask = LumaSplatsSemantics.FOREGROUND;
   }
-  setBackgroundWhite();      // sets currentBgMode='white' and updates label
-  updateBgButtonLabel();     // redundant but safe
+  setBackgroundWhite();
+  updateBgButtonLabel();
 }
 
 function isLumaCapture(url) {
@@ -300,6 +366,7 @@ function updateControllerRotation() {
   ctrlState.lastPos.copy(currPos);
 }
 function getThumbstickY() {
+  // Kept for compatibility; no longer used in mainLoop
   const session = renderer.xr.getSession?.();
   if (!session) return 0;
   let y = 0;
@@ -334,18 +401,11 @@ function showSupersplatInline(url) {
     supersplatFrame.classList.remove('hidden');
   }
   try { if (!inXR) renderer.setAnimationLoop(null); } catch (e) {}
-  // Type / state
   isCurrentSplatType = 'super';
-  currentIsSplat = false; // not a Three object
-  // Always start white
+  currentIsSplat = false;
   setBackgroundWhite();
-  // Initial label for splats
   setBgButtonLabelForSplat();
-
-  // Hide Three VR button (SuperSplat has its own)
   hideThreeVRButton();
-
-  // Ensure label reflects current mode/type
   updateBgButtonLabel();
 }
 
@@ -356,10 +416,7 @@ function hideSupersplatInline() {
   }
   renderer.domElement.classList.remove('hidden');
   try { if (!inXR && window.appMainLoop) renderer.setAnimationLoop(window.appMainLoop); } catch (e) {}
-  // Show again for Luma/Mesh
   showThreeVRButton();
-
-  // Ensure label reflects current type
   updateBgButtonLabel();
 }
 
@@ -369,7 +426,6 @@ async function loadAny(url) {
   if (loadingEl) loadingEl.style.display = 'block';
 
   try {
-    // SuperSplat: show inline
     if (SUPER_SPLAT_RX.test(url)) {
       if (loadingEl) loadingEl.style.display = 'none';
       removeCurrent();
@@ -377,13 +433,9 @@ async function loadAny(url) {
       return;
     }
 
-    // For all others: hide iframe
     hideSupersplatInline();
-
-    // Always start white for a new model
     setBackgroundWhite();
 
-    // Luma
     if (isLumaCapture(url)) {
       removeCurrent();
 
@@ -393,10 +445,7 @@ async function loadAny(url) {
       currentIsSplat = true;
       isCurrentSplatType = 'luma';
 
-      // Luma starts as foreground-only (white background)
       setForegroundOnlyForLuma();
-
-      // Initial label for splats
       setBgButtonLabelForSplat();
 
       if (inXR && currentObject) {
@@ -409,19 +458,13 @@ async function loadAny(url) {
       }
 
       if (loadingEl) loadingEl.style.display = 'none';
-      setTimeout(() => {
-        applyStateForCurrent(url); // keep semantics (height masks) behavior
-      }, 0);
+      setTimeout(() => { applyStateForCurrent(url); }, 0);
 
-      // Ensure Three VR button is visible for Luma
       showThreeVRButton();
-
-      // Ensure label is correct after load
       updateBgButtonLabel();
       return;
     }
 
-    // Mesh-based formats
     removeCurrent();
 
     const lower = url.toLowerCase();
@@ -475,7 +518,6 @@ async function loadAny(url) {
 
     if (!loaded) throw new Error('Model loaded but no scene/object found');
 
-    // Mesh: mark as non-splat
     currentIsSplat = false;
     isCurrentSplatType = 'mesh';
 
@@ -491,15 +533,11 @@ async function loadAny(url) {
     if (inXR && currentObject) placeObjectInFrontOfCamera(currentObject, 1.0);
     frameByBox(wrapper, 1.25);
 
-    // Initial label for non-splat
     setBgButtonLabelForMesh();
 
     if (loadingEl) loadingEl.style.display = 'none';
 
-    // Ensure Three VR button visible for Mesh
     showThreeVRButton();
-
-    // Ensure label is correct after load
     updateBgButtonLabel();
 
   } catch (e) {
@@ -509,7 +547,7 @@ async function loadAny(url) {
   }
 }
 
-// ---------- BG toggle label helpers (kept for compatibility, but central updater is authoritative) ----------
+// ---------- BG toggle label helpers (compatibility; central updater is authoritative) ----------
 function setBgButtonLabelForSplat() {
   const bgBtnEl = document.getElementById('bg-toggle');
   if (bgBtnEl) bgBtnEl.textContent = 'Background';
@@ -521,15 +559,10 @@ function setBgButtonLabelForMesh() {
 
 // ---------- BG toggle click ----------
 document.getElementById('bg-toggle')?.addEventListener('click', () => {
-  // Luma: toggle between foreground-only (white) and "original" (full) background
   if (isCurrentSplatType === 'luma') {
-    if (currentBgMode === 'white') {
-      setBackgroundOriginalForLuma();
-    } else {
-      setForegroundOnlyForLuma();
-    }
+    if (currentBgMode === 'white') setBackgroundOriginalForLuma();
+    else setForegroundOnlyForLuma();
   } else if (isCurrentSplatType === 'super') {
-    // SuperSplat iframe: emulate "original" by switching canvas to black; no direct semantics control
     if (currentBgMode === 'white') {
       setBackgroundBlack();
       currentBgMode = 'original';
@@ -537,12 +570,9 @@ document.getElementById('bg-toggle')?.addEventListener('click', () => {
       setBackgroundWhite();
     }
   } else {
-    // Non-splat: toggle plain white/black
     if (currentBgMode === 'white') setBackgroundBlack();
     else setBackgroundWhite();
   }
-
-  // Always refresh label after switching background
   updateBgButtonLabel();
 });
 
@@ -639,7 +669,6 @@ renderer.xr.addEventListener('sessionstart', () => {
   inXR = true;
   controls.enabled = false;
 
-  // Update VR button label when session starts
   updateVRButtonLabel();
 
   yawTarget = 0; pitchTarget = 0;
@@ -668,7 +697,6 @@ renderer.xr.addEventListener('sessionend', () => {
   endRotateWithController();
   controls.enabled = true;
 
-  // Reset VR button label when session ends
   updateVRButtonLabel();
 });
 
@@ -683,16 +711,42 @@ document.addEventListener('keydown', (e) => {
 // ---------- Main loop ----------
 function mainLoop(time, frame) {
   if (inXR) {
+    // Optional: enable to inspect which axes move and what handedness is reported
+    // debugXRGamepads(time);
+
     updateControllerRotation();
     vrYaw += (yawTarget - vrYaw) * SMOOTH;
     vrPitch += (pitchTarget - vrPitch) * SMOOTH;
     if (currentObject) currentObject.rotation.set(vrPitch, vrYaw, 0);
 
-    const stickY = getThumbstickY();
-    if (stickY !== 0) {
-      distanceTarget += (-stickY) * STICK_DIST_SENS;
+    // Left controller: Y-axis controls distance (prefer handedness; fallback by index 0)
+    let leftAxes = getControllerAxes('left');
+    if (!leftAxes) leftAxes = getControllerAxesByIndex(0);
+    if (leftAxes && Math.abs(leftAxes.y) > 0.15) {
+      distanceTarget += (-leftAxes.y) * STICK_DIST_SENS;
       distanceTarget = Math.max(MIN_DIST, Math.min(MAX_DIST, distanceTarget));
     }
+
+    // Right controller: X-axis triggers discrete 30° yaw steps (prefer handedness; fallback by index 1)
+    let rightAxes = getControllerAxes('right');
+    if (!rightAxes) rightAxes = getControllerAxesByIndex(1);
+    if (rightAxes) {
+      const x = rightAxes.x || 0;
+      let step = 0;
+      if (x > STEP_DEADZONE) step = +1;
+      else if (x < -STEP_DEADZONE) step = -1;
+
+      if (step !== 0 && lastRightStep === 0) {
+        yawTarget += step * STEP_ANGLE;
+      }
+
+      if (Math.abs(x) < STEP_HYST) {
+        lastRightStep = 0;
+      } else {
+        lastRightStep = step !== 0 ? step : lastRightStep;
+      }
+    }
+
     vrDistance += (distanceTarget - vrDistance) * DIST_SMOOTH;
 
     if (currentObject) {
