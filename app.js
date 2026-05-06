@@ -28,7 +28,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0xffffff, 1);
 renderer.outputColorSpace = SRGBColorSpace;
 
-document.body.appendChild(renderer.domElement);
+// document.body.appendChild(renderer.domElement);
 const slot = document.getElementById('viewer-slot');
 if (slot) slot.appendChild(renderer.domElement);
 
@@ -103,11 +103,19 @@ const DIST_SMOOTH = 0.18;
 const STICK_DIST_SENS = 0.025;
 let entryYaw = 0;
 
-// ---------- Right-stick step rotation state ----------
+// ---------- Right-stick step rotation + camera height state ----------
 let lastRightStep = 0;          // -1, 0, +1 depending on current tilt region
 const STEP_DEADZONE = 0.3;      // ignore small tilts
 const STEP_HYST = 0.2;          // hysteresis to prevent rapid flapping
 const STEP_ANGLE = Math.PI / 6; // 30 degrees per step
+
+// Camera vertical offset controlled by right stick Y in VR
+let camHeightOffset = 0;          // meters (smoothed)
+let camHeightTarget = 0;          // meters (raw target)
+const CAM_HEIGHT_MIN = -1.0;      // clamp range downwards
+const CAM_HEIGHT_MAX =  1.0;      // clamp range upwards
+const CAM_HEIGHT_SENS = 0.015;    // sensitivity per frame for right stick Y
+const CAM_HEIGHT_SMOOTH = 0.2;    // smoothing factor for vertical offset
 
 // ---------- UI / current model state ----------
 let currentObject = null;
@@ -141,7 +149,6 @@ function getControllerAxes(handedness) {
   if (!session) return null;
   for (const src of session.inputSources) {
     if (!src) continue;
-    // Some runtimes may report 'none'; we skip those unless explicitly asked with 'any'
     if (handedness !== 'any' && src.handedness !== handedness) continue;
     const gp = src.gamepad;
     if (!gp || !gp.axes || gp.axes.length < 2) continue;
@@ -181,25 +188,24 @@ function getControllerAxesByIndex(index) {
 }
 
 // Optional: runtime logger (enable temporarily for debugging)
-let _xrDebugTimer = 0;
-function debugXRGamepads(time) {
-  const session = renderer.xr.getSession?.();
-  if (!session) return;
-  if (time < _xrDebugTimer) return;
-  _xrDebugTimer = time + 1000; // log once per second
-
-  const summary = [];
-  for (const src of session.inputSources) {
-    const gp = src.gamepad;
-    if (!gp) continue;
-    summary.push({
-      hand: src.handedness,
-      axes: Array.from(gp.axes).map(v => +v.toFixed(2)),
-      buttons: gp.buttons?.map(b => (b?.pressed ? 1 : 0)) || []
-    });
-  }
-  if (summary.length) console.debug('[XR gp]', summary);
-}
+// let _xrDebugTimer = 0;
+// function debugXRGamepads(time) {
+//   const session = renderer.xr.getSession?.();
+//   if (!session) return;
+//   if (time < _xrDebugTimer) return;
+//   _xrDebugTimer = time + 1000; // log once per second
+//   const summary = [];
+//   for (const src of session.inputSources) {
+//     const gp = src.gamepad;
+//     if (!gp) continue;
+//     summary.push({
+//       hand: src.handedness,
+//       axes: Array.from(gp.axes).map(v => +v.toFixed(2)),
+//       buttons: gp.buttons?.map(b => (b?.pressed ? 1 : 0)) || []
+//     });
+//   }
+//   if (summary.length) console.debug('[XR gp]', summary);
+// }
 
 // ---------- Utilities ----------
 function setBackgroundWhite() {
@@ -366,7 +372,7 @@ function updateControllerRotation() {
   ctrlState.lastPos.copy(currPos);
 }
 function getThumbstickY() {
-  // Kept for compatibility; no longer used in mainLoop
+  // Kept for compatibility; not used in VR main loop anymore
   const session = renderer.xr.getSession?.();
   if (!session) return 0;
   let y = 0;
@@ -674,6 +680,10 @@ renderer.xr.addEventListener('sessionstart', () => {
   yawTarget = 0; pitchTarget = 0;
   vrYaw = 0; vrPitch = 0;
 
+  // Reset camera height offset on VR session start
+  camHeightOffset = 0;
+  camHeightTarget = 0;
+
   if (currentObject) placeObjectInFrontOfCamera(currentObject, 1.0);
 
   const session = renderer.xr.getSession();
@@ -697,8 +707,15 @@ renderer.xr.addEventListener('sessionend', () => {
   endRotateWithController();
   controls.enabled = true;
 
+  // Force a resize + projection update to avoid aspect/axis stretching
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+
   updateVRButtonLabel();
 });
+
 
 // ESC ends VR
 document.addEventListener('keydown', (e) => {
@@ -711,7 +728,7 @@ document.addEventListener('keydown', (e) => {
 // ---------- Main loop ----------
 function mainLoop(time, frame) {
   if (inXR) {
-    // Optional: enable to inspect which axes move and what handedness is reported
+    // Optional: enable to inspect handedness/axes
     // debugXRGamepads(time);
 
     updateControllerRotation();
@@ -745,7 +762,17 @@ function mainLoop(time, frame) {
       } else {
         lastRightStep = step !== 0 ? step : lastRightStep;
       }
+
+      // Right controller: Y-axis adjusts camera height target smoothly
+      if (Math.abs(rightAxes.y) > 0.15) {
+        // Push up (negative Y) raises, push down (positive Y) lowers
+        camHeightTarget += (-rightAxes.y) * CAM_HEIGHT_SENS;
+        camHeightTarget = Math.max(CAM_HEIGHT_MIN, Math.min(CAM_HEIGHT_MAX, camHeightTarget));
+      }
     }
+
+    // Smooth vertical offset toward target
+    camHeightOffset += (camHeightTarget - camHeightOffset) * CAM_HEIGHT_SMOOTH;
 
     vrDistance += (distanceTarget - vrDistance) * DIST_SMOOTH;
 
@@ -754,6 +781,10 @@ function mainLoop(time, frame) {
       const camPos = new Vector3().setFromMatrixPosition(xrCam.matrixWorld);
       const forwardYaw = new Vector3(Math.sin(entryYaw), 0, -Math.cos(entryYaw));
       const targetPos = camPos.clone().add(forwardYaw.multiplyScalar(vrDistance));
+
+      // Apply vertical offset controlled by right stick Y
+      targetPos.y += camHeightOffset;
+
       currentObject.position.copy(targetPos);
       currentObject.updateMatrixWorld(true);
     }
